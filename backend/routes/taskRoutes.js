@@ -1,27 +1,133 @@
 const express = require("express");
+const Task = require("../models/Task");
+const { protect } = require("../middleware/authMiddleware");
+
 const router = express.Router();
 
-const authMiddleware = require("../middleware/authMiddleware");
-const { getTasksByEmployee } = require("../controllers/taskController");
+// All routes require authentication
+router.use(protect);
 
-const {
+// Create Task (temporary fix - handles assignment data)
+router.post("/", async (req, res) => {
+  try {
+    const { title, description, assignedTo } = req.body;
+    
+    const task = await Task.create({
+      title,
+      description,
+      assignedTo,
+      assignedBy: req.user.id
+    });
 
-createTask,
-getTasks,
-updateTaskStatus,
-deleteTask
+    // Populate the user data for response
+    const populatedTask = await Task.findById(task._id)
+      .populate("assignedTo", "name email")
+      .populate("assignedBy", "name email");
 
-} = require("../controllers/taskController");
+    res.status(201).json({
+      success: true,
+      message: "Task created",
+      task: populatedTask
+    });
 
+  } catch (err) {
+    console.error("Task creation error:", err);
+    res.status(400).json({ message: err.message });
+  }
+});
 
-router.post("/",authMiddleware,createTask);
+// Get Tasks (temporary fix - handles population)
+router.get("/", async (req, res) => {
+  try {
+    let tasks;
 
-router.get("/",authMiddleware,getTasks);
+    // manager can see all tasks
+    if (req.user.role === "manager") {
+      tasks = await Task.find()
+        .populate("assignedTo", "name email")
+        .populate("assignedBy", "name email");
+    }
+    // employee can see only their tasks
+    else {
+      tasks = await Task.find({
+        assignedTo: req.user.id
+      })
+        .populate("assignedBy", "name");
+    }
 
-router.put("/:id",authMiddleware,updateTaskStatus);
+    res.json({
+      success: true,
+      tasks
+    });
 
-router.delete("/:id",authMiddleware,deleteTask);
+  } catch (error) {
+    console.error("Get tasks error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+});
 
-router.get("/employee/:employeeId",authMiddleware,getTasksByEmployee);
+// Update Task Status
+router.patch("/:id/status", async (req, res) => {
+  try {
+    const { status } = req.body;
+
+    const task = await Task.findByIdAndUpdate(
+      req.params.id,
+      { status },
+      { new: true }
+    ).populate("assignedTo", "name email")
+     .populate("assignedBy", "name email");
+
+    res.json({
+      success: true,
+      message: "Task updated",
+      task
+    });
+
+  } catch (error) {
+    console.error("Update task error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+});
+
+// Delete Task
+router.delete("/:id", async (req, res) => {
+  try {
+    // check role
+    if (req.user.role !== "manager") {
+      return res.status(403).json({
+        success: false,
+        message: "Only managers can delete tasks"
+      });
+    }
+
+    const task = await Task.findByIdAndDelete(req.params.id);
+
+    if (!task) {
+      return res.status(404).json({
+        success: false,
+        message: "Task not found"
+      });
+    }
+
+    res.json({
+      success: true,
+      message: "Task deleted successfully"
+    });
+
+  } catch (error) {
+    console.error("Delete task error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+});
 
 module.exports = router;

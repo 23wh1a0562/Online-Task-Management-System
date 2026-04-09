@@ -52,7 +52,8 @@ exports.getTasks = async (req, res) => {
         if(req.user.role === "manager"){
 
             tasks = await Task.find()
-            .populate("assignedTo","name email");
+            .populate("assignedTo","name email")
+            .populate("assignedBy","name email");
 
         }
 

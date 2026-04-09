@@ -77,7 +77,8 @@ exports.loginUser = async (req,res)=>{
         res.json({
             success:true,
             token,
-            user
+            user,
+            role: user.role 
         });
 
     }catch(error){
